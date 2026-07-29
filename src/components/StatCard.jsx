@@ -36,7 +36,6 @@ function useAnimatedNumber(target) {
 }
 
 export default function StatCard({ label, value, sub, trend, trendType, rawAmount }) {
-  // trendType can be 'up' (danger for expenses, success for income), 'down', or neutral
   const isUp = trendType === 'up';
   const isDown = trendType === 'down';
   const isSuccess = trendType === 'success';
@@ -46,9 +45,18 @@ export default function StatCard({ label, value, sub, trend, trendType, rawAmoun
   if (isDown) trendColor = 'text-[var(--success)]';
   if (isSuccess) trendColor = 'text-[var(--success)]';
 
-  // Animate only if rawAmount is provided (numeric)
   const animatedNum = useAnimatedNumber(rawAmount ?? 0);
-  const displayValue = rawAmount !== undefined ? value.replace(/[\d,]+/, animatedNum.toLocaleString()) : value;
+  
+  // Format numeric display value properly without double negative signs
+  let displayValue = value;
+  if (rawAmount !== undefined) {
+    const isNegative = animatedNum < 0;
+    const absFormatted = Math.abs(animatedNum).toLocaleString();
+    // Match currency symbol from string (non-digit, non-minus, non-comma)
+    const currencyMatch = value.match(/^[^\d\-]+/);
+    const currSymbol = currencyMatch ? currencyMatch[0] : '';
+    displayValue = isNegative ? `-${currSymbol}${absFormatted}` : `${currSymbol}${absFormatted}`;
+  }
 
   return (
     <div className="cred-card flex flex-col justify-between min-h-[100px] hover:shadow-lg transition-all duration-300 group">

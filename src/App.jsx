@@ -388,7 +388,7 @@ export default function App() {
             />
             <StatCard
               label="Remaining Net Balance"
-              value={`${currency}${stats.balance.toLocaleString()}`}
+              value={stats.balance >= 0 ? `${currency}${stats.balance.toLocaleString()}` : `-${currency}${Math.abs(stats.balance).toLocaleString()}`}
               sub="Income minus monthly spent"
               trend={stats.balance >= 0 ? `+${currency}${stats.balance.toLocaleString()}` : `-${currency}${Math.abs(stats.balance).toLocaleString()}`}
               trendType={stats.balance >= 0 ? 'down' : 'up'}

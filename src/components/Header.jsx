@@ -39,57 +39,58 @@ export default function Header({
   const initials = getInitials(userEmail);
   const avatarColor = getAvatarColor(userEmail);
   const firstName = userEmail ? userEmail.split('@')[0].split(/[._]/)[0] : '';
-  const displayName = firstName.charAt(0).toUpperCase() + firstName.slice(1);
+  const displayName = firstName ? firstName.charAt(0).toUpperCase() + firstName.slice(1) : '';
 
   return (
-    <header className="border-b border-[var(--border-color)] px-6 py-4 sticky top-0 z-10 bg-[var(--bg-primary)]/80 backdrop-blur-md">
-      <div className="max-w-xl mx-auto flex items-center justify-between">
+    <header className="border-b border-[var(--border-color)] px-4 sm:px-6 py-3 sticky top-0 z-10 bg-[var(--bg-primary)]/90 backdrop-blur-md">
+      <div className="max-w-xl mx-auto flex items-center justify-between gap-2 overflow-hidden">
         {/* Greeting + name */}
-        <div>
+        <div className="min-w-0 flex-1">
           {userEmail ? (
-            <>
-              <p className="text-[11px] text-[var(--text-secondary)] font-medium tracking-wide">
+            <div>
+              <p className="text-[10px] sm:text-[11px] text-[var(--text-secondary)] font-medium tracking-wide truncate">
                 {greeting} 👋
               </p>
-              <h1 className="text-lg font-black tracking-tight text-[var(--text-primary)] leading-tight">
+              <h1 className="text-sm sm:text-lg font-black tracking-tight text-[var(--text-primary)] leading-tight truncate">
                 {displayName || 'LEDGER'}
               </h1>
-            </>
+            </div>
           ) : (
-            <>
-              <h1 className="text-xl font-bold tracking-tight text-[var(--text-primary)]">
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[var(--text-primary)]">
                 LEDGER
               </h1>
-              <p className="text-xs text-[var(--text-secondary)]">Your premium wealth dashboard</p>
-            </>
+              <p className="text-[10px] sm:text-xs text-[var(--text-secondary)] truncate">Your wealth dashboard</p>
+            </div>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        {/* Action controls */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
           {/* Spendly Wrapped Story Button */}
           {onOpenWrapped && (
             <button
               onClick={onOpenWrapped}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black text-black tracking-wide shadow-md transition-all hover:scale-105 active:scale-95 animate-pulse"
+              className="flex items-center gap-1 px-2 py-1 rounded-xl text-[11px] font-black text-black tracking-wide shadow-md transition-all hover:scale-105 active:scale-95 animate-pulse shrink-0"
               style={{
                 background: 'linear-gradient(135deg, #C9F31D 0%, #a78bfa 100%)',
-                boxShadow: '0 0 12px rgba(201,243,29,0.3)',
+                boxShadow: '0 0 10px rgba(201,243,29,0.3)',
               }}
               title="View 2026 Year-in-Review Wrapped"
             >
-              <Sparkles size={13} />
-              <span>Wrapped</span>
+              <Sparkles size={12} />
+              <span className="hidden xs:inline">Wrapped</span>
             </button>
           )}
 
-          {/* Quick Currency Selector Pill with Live FX Indicator */}
+          {/* Quick Currency Selector Pill */}
           {onCurrencyChange && (
-            <div className="relative flex items-center bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl px-2 py-1 gap-1 text-xs font-mono font-semibold text-[var(--text-primary)] hover:border-[var(--text-muted)] transition">
+            <div className="relative flex items-center bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl px-1.5 py-0.5 gap-1 text-[11px] font-mono font-semibold text-[var(--text-primary)] hover:border-[var(--text-muted)] transition shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" title="Live FX Rates Synced" />
               <select
                 value={currency}
                 onChange={(e) => onCurrencyChange(e.target.value)}
-                className="bg-transparent text-[var(--text-primary)] font-bold outline-none cursor-pointer text-xs pr-1"
+                className="bg-transparent text-[var(--text-primary)] font-bold outline-none cursor-pointer text-[11px]"
                 aria-label="Display Currency"
               >
                 {CURRENCIES.map(c => (
@@ -105,11 +106,11 @@ export default function Header({
           <button
             onClick={() => setDarkMode(!darkMode)}
             aria-label="Toggle theme"
-            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-2 rounded-lg hover:bg-[var(--bg-secondary)] transition"
+            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--bg-secondary)] transition shrink-0"
           >
             {darkMode
-              ? <Sun size={19} className="text-[#C9F31D]" />
-              : <Moon size={19} />
+              ? <Sun size={17} className="text-[#C9F31D]" />
+              : <Moon size={17} />
             }
           </button>
 
@@ -117,9 +118,9 @@ export default function Header({
           <button
             onClick={onSettings}
             aria-label="Settings"
-            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-2 rounded-lg hover:bg-[var(--bg-secondary)] transition"
+            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--bg-secondary)] transition shrink-0"
           >
-            <Settings size={19} />
+            <Settings size={17} />
           </button>
 
           {/* Sign out */}
@@ -128,9 +129,9 @@ export default function Header({
               onClick={onSignOut}
               aria-label="Sign out"
               title="Sign out"
-              className="text-[var(--text-secondary)] hover:text-red-400 p-2 rounded-lg hover:bg-[var(--bg-secondary)] transition"
+              className="text-[var(--text-secondary)] hover:text-red-400 p-1.5 rounded-lg hover:bg-[var(--bg-secondary)] transition shrink-0"
             >
-              <LogOut size={19} />
+              <LogOut size={17} />
             </button>
           )}
 
@@ -138,10 +139,10 @@ export default function Header({
           {userEmail && (
             <div
               title={userEmail}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-black text-black ml-1 cursor-default select-none flex-shrink-0"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] font-black text-black ml-0.5 cursor-default select-none shrink-0"
               style={{
                 backgroundColor: avatarColor,
-                boxShadow: `0 0 12px ${avatarColor}60`
+                boxShadow: `0 0 10px ${avatarColor}50`
               }}
             >
               {initials}
