@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Plus, X, Loader2 } from 'lucide-react';
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import StatCard from './components/StatCard';
@@ -12,7 +12,12 @@ import MonthView from './components/MonthView';
 import InsightsView from './components/InsightsView';
 import CalendarView from './components/CalendarView';
 import SearchView from './components/SearchView';
-import { db } from './supabase';
+import AuthModal from './components/AuthModal';
+import Confetti from './components/Confetti';
+import { useToast } from './components/Toast';
+import { db, auth } from './supabase';
+import { CATEGORY_ICONS } from './components/ExpenseFormModal';
+import { Wallet } from 'lucide-react';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Breakfast', color: '#C17817' },
@@ -32,6 +37,7 @@ const currentMonthStr = (() => {
 })();
 
 export default function App() {
+  const [user, setUser] = useState(undefined); // undefined = checking, null = logged out
   const [expenses, setExpenses] = useState([]);
   const [income, setIncome] = useState(0);
   const [currency, setCurrency] = useState('₹');
@@ -42,10 +48,20 @@ export default function App() {
 
   // UI state
   const [activeTab, setActiveTab] = useState('today');
+  const [tabKey, setTabKey] = useState(0); // forces re-mount on tab switch for animation
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
-  const [saveError, setSaveError] = useState(false);
+  const [showFabMenu, setShowFabMenu] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [confettiTrigger, setConfettiTrigger] = useState(0);
+
+  // Toast
+  const toast = useToast();
+
+  // Pull-to-refresh touch tracking
+  const ptrStartY = useRef(null);
+  const mainRef = useRef(null);
 
   // Offsets and periods
   const [weekOffset, setWeekOffset] = useState(0);
@@ -66,8 +82,25 @@ export default function App() {
     }
   }, [darkMode]);
 
-  // Load configuration and expenses on mount
+  // Check existing auth session on mount + subscribe to changes
   useEffect(() => {
+    async function initAuth() {
+      const session = await auth.getSession();
+      setUser(session?.user || null);
+    }
+    initAuth();
+
+    const { data: { subscription } } = auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load configuration and expenses once user is authenticated
+  useEffect(() => {
+    if (!user) return; // Not logged in yet
+
     async function loadData() {
       try {
         setLoading(true);
@@ -91,7 +124,7 @@ export default function App() {
       }
     }
     loadData();
-  }, []);
+  }, [user]);
 
   // Save Settings wrapper
   async function handleSaveSettings({ currency: nextCurrency, income: nextIncome, budget: nextBudget }) {
@@ -156,37 +189,26 @@ export default function App() {
   // Add or Update Expense handler
   async function handleExpenseSubmit(payload) {
     if (payload.id) {
-      // EDIT MODE
-      const updated = {
-        ...payload,
-        updatedAt: new Date().toISOString()
-      };
-      
-      const nextExpenses = expenses.map(e => e.id === payload.id ? updated : e);
-      setExpenses(nextExpenses);
-      
+      const updated = { ...payload, updatedAt: new Date().toISOString() };
+      setExpenses(prev => prev.map(e => e.id === payload.id ? updated : e));
       try {
         await db.saveExpense(updated);
-        setSaveError(false);
+        toast('Expense updated ✓', 'success');
       } catch (err) {
-        setSaveError(true);
+        toast('Failed to save changes', 'error');
       }
     } else {
-      // ADD MODE
       const newEntry = {
         id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         ...payload,
         createdAt: new Date().toISOString()
       };
-      
-      const nextExpenses = [...expenses, newEntry];
-      setExpenses(nextExpenses);
-
+      setExpenses(prev => [...prev, newEntry]);
       try {
         await db.saveExpense(newEntry);
-        setSaveError(false);
+        toast(`${payload.category} logged ✓`, 'success');
       } catch (err) {
-        setSaveError(true);
+        toast('Failed to sync — saved locally', 'warning');
       }
     }
     setEditingExpense(null);
@@ -194,14 +216,12 @@ export default function App() {
 
   // Delete Expense handler
   async function handleDeleteExpense(id) {
-    const nextExpenses = expenses.filter(e => e.id !== id);
-    setExpenses(nextExpenses);
-
+    setExpenses(prev => prev.filter(e => e.id !== id));
     try {
       await db.deleteExpense(id);
-      setSaveError(false);
+      toast('Expense deleted', 'info');
     } catch (err) {
-      setSaveError(true);
+      toast('Delete failed', 'error');
     }
   }
 
@@ -218,16 +238,78 @@ export default function App() {
 
   // Dashboard Stats Computations
   const stats = useMemo(() => {
-    // Current month expenses
     const monthlyExpenses = expenses.filter(e => e.date.startsWith(currentMonthStr));
     const totalSpent = monthlyExpenses.reduce((sum, e) => sum + e.amount, 0);
     const balance = income - totalSpent;
-
-    return {
-      monthlySpent: totalSpent,
-      balance: balance
-    };
+    return { monthlySpent: totalSpent, balance };
   }, [expenses, income]);
+
+  // Spending streak (consecutive days with at least 1 expense, going backwards from today)
+  const streak = useMemo(() => {
+    const pad2 = n => String(n).padStart(2, '0');
+    const toKey = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+    const dateSet = new Set(expenses.map(e => e.date));
+    let count = 0;
+    const d = new Date();
+    while (dateSet.has(toKey(d))) {
+      count++;
+      d.setDate(d.getDate() - 1);
+    }
+    return count;
+  }, [expenses]);
+
+  // Confetti when budget is healthy (< 60% used)
+  const budget = monthlyBudgets[currentMonthStr] || 0;
+  const prevBudgetOk = useRef(false);
+  useEffect(() => {
+    if (budget > 0 && stats.monthlySpent / budget < 0.6) {
+      if (!prevBudgetOk.current) setConfettiTrigger(t => t + 1);
+      prevBudgetOk.current = true;
+    } else {
+      prevBudgetOk.current = false;
+    }
+  }, [budget, stats.monthlySpent]);
+
+  // Pull-to-refresh handlers
+  const handlePTRStart = useCallback((e) => {
+    if (mainRef.current?.scrollTop === 0) ptrStartY.current = e.touches[0].clientY;
+  }, []);
+
+  const handlePTREnd = useCallback(async (e) => {
+    if (ptrStartY.current === null) return;
+    const dy = e.changedTouches[0].clientY - ptrStartY.current;
+    ptrStartY.current = null;
+    if (dy > 60) {
+      setIsRefreshing(true);
+      try {
+        const [fetchedExpenses, settings] = await Promise.all([db.getExpenses(), db.getSettings()]);
+        setExpenses(fetchedExpenses || []);
+        setIncome(settings.income || 0);
+        toast('Data refreshed ✓', 'success');
+      } catch { toast('Refresh failed', 'error'); }
+      finally { setIsRefreshing(false); }
+    }
+  }, [toast]);
+
+  // Tab switch with animation
+  function switchTab(tab) {
+    setActiveTab(tab);
+    setTabKey(k => k + 1);
+  }
+
+  // Checking session — blank screen while resolving
+  if (user === undefined) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#080808]">
+        <div className="w-10 h-10 border-4 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Not logged in — show auth screen
+  if (user === null) {
+    return <AuthModal onAuthSuccess={(u) => setUser(u)} />;
+  }
 
   if (loading) {
     return (
@@ -241,37 +323,68 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] pb-28 font-sans transition-colors duration-300">
-      {/* Header component */}
-      <Header 
-        darkMode={darkMode} 
-        setDarkMode={handleToggleDarkMode} 
-        onSettings={() => setShowSettings(true)} 
+    <div
+      className="min-h-screen bg-[var(--bg-primary)] pb-28 font-sans transition-colors duration-300"
+      onTouchStart={handlePTRStart}
+      onTouchEnd={handlePTREnd}
+    >
+      <Confetti trigger={confettiTrigger} />
+
+      {/* Header */}
+      <Header
+        darkMode={darkMode}
+        setDarkMode={handleToggleDarkMode}
+        onSettings={() => setShowSettings(true)}
+        userEmail={user?.email}
+        streak={streak}
+        onSignOut={async () => {
+          await auth.signOut();
+          setUser(null);
+          setExpenses([]);
+          toast('Signed out successfully', 'info');
+        }}
       />
 
-      <main className="px-5 pt-6 max-w-xl mx-auto space-y-6">
+      {/* Pull-to-refresh indicator */}
+      {isRefreshing && (
+        <div className="flex justify-center py-2">
+          <Loader2 size={18} className="animate-spin text-[var(--accent)]" />
+        </div>
+      )}
+
+      <main ref={mainRef} className="px-5 pt-6 max-w-xl mx-auto space-y-6">
+        {/* Streak badge */}
+        {streak >= 2 && activeTab === 'today' && (
+          <div className="flex justify-end">
+            <div
+              className="streak-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-black"
+              style={{ backgroundColor: '#C9F31D' }}
+            >
+              🔥 {streak} day streak
+            </div>
+          </div>
+        )}
+
         {/* Core Wealth Dashboard Cards */}
         {activeTab !== 'insights' && activeTab !== 'search' && (
           <div className="grid grid-cols-2 gap-3.5">
-            {/* Income Card */}
-            <StatCard 
-              label="Monthly Income" 
-              value={`${currency}${income.toLocaleString()}`} 
+            <StatCard
+              label="Monthly Income"
+              value={`${currency}${income.toLocaleString()}`}
               sub="Baseline income metrics"
               trend="Current"
               trendType="success"
+              rawAmount={income}
             />
-            {/* Net Balance Card */}
-            <StatCard 
-              label="Remaining Net Balance" 
-              value={`${currency}${stats.balance.toLocaleString()}`} 
+            <StatCard
+              label="Remaining Net Balance"
+              value={`${currency}${stats.balance.toLocaleString()}`}
               sub="Income minus monthly spent"
               trend={stats.balance >= 0 ? `+${currency}${stats.balance.toLocaleString()}` : `-${currency}${Math.abs(stats.balance).toLocaleString()}`}
               trendType={stats.balance >= 0 ? 'down' : 'up'}
+              rawAmount={stats.balance}
             />
-            
-            {/* Monthly Budget Card */}
-            <BudgetCard 
+            <BudgetCard
               budget={monthlyBudgets[currentMonthStr] || 0}
               spent={stats.monthlySpent}
               currency={currency}
@@ -280,87 +393,97 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab view selectors */}
-        {activeTab === 'today' && (
-          <TodayView 
-            expenses={expenses} 
-            currency={currency} 
-            getCategoryMeta={getCategoryMeta} 
-            onEdit={handleEditTrigger}
-            onDelete={handleDeleteExpense} 
-            onOpenAdd={() => {
-              setEditingExpense(null);
-              setShowAddModal(true);
-            }}
-          />
-        )}
-        {activeTab === 'week' && (
-          <WeekView 
-            expenses={expenses} 
-            currency={currency} 
-            weekOffset={weekOffset} 
-            setWeekOffset={setWeekOffset} 
-          />
-        )}
-        {activeTab === 'month' && (
-          <MonthView 
-            expenses={expenses} 
-            currency={currency} 
-            monthOffset={monthOffset} 
-            setMonthOffset={setMonthOffset} 
-          />
-        )}
-        {activeTab === 'calendar' && (
-          <CalendarView 
-            expenses={expenses} 
-            currency={currency} 
-            getCategoryMeta={getCategoryMeta}
-            onEdit={handleEditTrigger}
-            onDelete={handleDeleteExpense}
-          />
-        )}
-        {activeTab === 'search' && (
-          <SearchView 
-            expenses={expenses} 
-            currency={currency} 
-            getCategoryMeta={getCategoryMeta}
-            onEdit={handleEditTrigger}
-            onDelete={handleDeleteExpense}
-          />
-        )}
-        {activeTab === 'insights' && (
-          <InsightsView 
-            expenses={expenses} 
-            currency={currency} 
-            getCategoryMeta={getCategoryMeta}
-            period={insightPeriod}
-            setPeriod={setInsightPeriod}
-            monthlyBudgets={monthlyBudgets}
-          />
-        )}
+        {/* Tab views — key forces re-mount for enter animation */}
+        <div key={tabKey} className="tab-enter">
+          {activeTab === 'today' && (
+            <TodayView
+              expenses={expenses}
+              currency={currency}
+              getCategoryMeta={getCategoryMeta}
+              onEdit={handleEditTrigger}
+              onDelete={handleDeleteExpense}
+              onOpenAdd={() => { setEditingExpense(null); setShowAddModal(true); }}
+            />
+          )}
+          {activeTab === 'week' && (
+            <WeekView expenses={expenses} currency={currency} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />
+          )}
+          {activeTab === 'month' && (
+            <MonthView expenses={expenses} currency={currency} monthOffset={monthOffset} setMonthOffset={setMonthOffset} />
+          )}
+          {activeTab === 'calendar' && (
+            <CalendarView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} onEdit={handleEditTrigger} onDelete={handleDeleteExpense} />
+          )}
+          {activeTab === 'search' && (
+            <SearchView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} onEdit={handleEditTrigger} onDelete={handleDeleteExpense} />
+          )}
+          {activeTab === 'insights' && (
+            <InsightsView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} period={insightPeriod} setPeriod={setInsightPeriod} monthlyBudgets={monthlyBudgets} />
+          )}
+        </div>
       </main>
 
-      {/* Floating Add Expense Trigger */}
-      <button
-        onClick={() => {
-          setEditingExpense(null);
-          setShowAddModal(true);
-        }}
-        aria-label="Add transaction"
-        className="fixed bottom-20 right-6 z-10 bg-[var(--accent)] text-[var(--accent-text)] rounded-full p-4.5 shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 hover:shadow-[0_0_20px_rgba(201,243,29,0.4)]"
-      >
-        <Plus size={24} />
-      </button>
-
-      {/* Persistent Save Error Banner */}
-      {saveError && (
-        <div className="fixed bottom-24 left-6 right-6 max-w-xl mx-auto bg-[var(--danger)]/15 border border-[var(--danger)]/35 text-[var(--danger)] text-xs px-4 py-2.5 rounded-xl text-center z-15 backdrop-blur-md">
-          Unable to synchronize changes. Verify network connection and retry.
+      {/* Quick-add FAB menu */}
+      {showFabMenu && (
+        <div className="fixed bottom-24 right-4 z-20 flex flex-col items-end gap-2">
+          {/* Close overlay */}
+          <div className="fixed inset-0 z-[-1]" onClick={() => setShowFabMenu(false)} />
+          {allCategories.slice(0, 6).map((cat, i) => {
+            const Icon = CATEGORY_ICONS[cat.name] || Wallet;
+            return (
+              <button
+                key={cat.name}
+                className="fab-menu-item flex items-center gap-2 pl-3 pr-4 py-2 rounded-2xl text-sm font-semibold text-white backdrop-blur-md border"
+                style={{
+                  animationDelay: `${i * 40}ms`,
+                  background: `${cat.color}22`,
+                  borderColor: `${cat.color}40`,
+                  boxShadow: `0 4px 16px rgba(0,0,0,0.3)`,
+                }}
+                onClick={() => {
+                  setShowFabMenu(false);
+                  setEditingExpense(null);
+                  setShowAddModal(true);
+                }}
+              >
+                <span className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${cat.color}30` }}>
+                  <Icon size={14} style={{ color: cat.color }} />
+                </span>
+                {cat.name}
+              </button>
+            );
+          })}
         </div>
       )}
 
+      {/* FAB Button — tap opens modal, long-press opens quick menu */}
+      <button
+        onPointerDown={(() => {
+          let timer;
+          return (e) => {
+            e.currentTarget._longpressTimer = setTimeout(() => {
+              setShowFabMenu(v => !v);
+            }, 400);
+          };
+        })()}
+        onPointerUp={(e) => {
+          clearTimeout(e.currentTarget._longpressTimer);
+        }}
+        onClick={() => {
+          if (!showFabMenu) {
+            setEditingExpense(null);
+            setShowAddModal(true);
+          }
+          setShowFabMenu(false);
+        }}
+        aria-label="Add transaction"
+        className="fixed bottom-20 right-6 z-10 bg-[var(--accent)] text-[var(--accent-text)] rounded-full p-4.5 shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 hover:shadow-[0_0_24px_rgba(201,243,29,0.5)]"
+      >
+        <Plus size={24} className={showFabMenu ? 'rotate-45 transition-transform' : 'transition-transform'} />
+      </button>
+
       {/* Navigation tabs */}
-      <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
+      <BottomNav activeTab={activeTab} setActiveTab={switchTab} />
 
       {/* Modal overlays */}
       {showAddModal && (
@@ -368,22 +491,18 @@ export default function App() {
           categories={allCategories}
           onAddCategory={handleAddCategory}
           onSubmit={handleExpenseSubmit}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingExpense(null);
-          }}
+          onClose={() => { setShowAddModal(false); setEditingExpense(null); }}
           expense={editingExpense}
         />
       )}
-
       {showSettings && (
-        <SettingsModal 
-          currency={currency} 
+        <SettingsModal
+          currency={currency}
           income={income}
           monthlyBudgets={monthlyBudgets}
           currentMonth={currentMonthStr}
-          onSave={handleSaveSettings} 
-          onClose={() => setShowSettings(false)} 
+          onSave={handleSaveSettings}
+          onClose={() => setShowSettings(false)}
           expenses={expenses}
         />
       )}

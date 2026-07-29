@@ -1,6 +1,41 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-export default function StatCard({ label, value, sub, trend, trendType }) {
+function useAnimatedNumber(target) {
+  const [display, setDisplay] = useState(target);
+  const prevRef = useRef(target);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    const from = prevRef.current;
+    const to = target;
+    prevRef.current = to;
+
+    if (from === to) return;
+
+    const duration = 600;
+    const startTime = performance.now();
+
+    function tick(now) {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      // Ease out quart
+      const eased = 1 - Math.pow(1 - t, 4);
+      setDisplay(Math.round(from + (to - from) * eased));
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    }
+
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [target]);
+
+  return display;
+}
+
+export default function StatCard({ label, value, sub, trend, trendType, rawAmount }) {
   // trendType can be 'up' (danger for expenses, success for income), 'down', or neutral
   const isUp = trendType === 'up';
   const isDown = trendType === 'down';
@@ -11,12 +46,20 @@ export default function StatCard({ label, value, sub, trend, trendType }) {
   if (isDown) trendColor = 'text-[var(--success)]';
   if (isSuccess) trendColor = 'text-[var(--success)]';
 
+  // Animate only if rawAmount is provided (numeric)
+  const animatedNum = useAnimatedNumber(rawAmount ?? 0);
+  const displayValue = rawAmount !== undefined ? value.replace(/[\d,]+/, animatedNum.toLocaleString()) : value;
+
   return (
-    <div className="cred-card flex flex-col justify-between min-h-[100px] hover:shadow-lg transition-all duration-300">
+    <div className="cred-card flex flex-col justify-between min-h-[100px] hover:shadow-lg transition-all duration-300 group">
       <div>
         <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">{label}</p>
-        <p className="text-xl font-bold text-[var(--text-primary)] font-mono tracking-tight mt-1.5 truncate">
-          {value}
+        <p
+          key={displayValue}
+          className="text-xl font-bold text-[var(--text-primary)] font-mono tracking-tight mt-1.5 truncate"
+          style={{ animation: 'countUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both' }}
+        >
+          {displayValue}
         </p>
       </div>
       {sub || trend ? (
@@ -29,6 +72,8 @@ export default function StatCard({ label, value, sub, trend, trendType }) {
           )}
         </div>
       ) : null}
+      {/* Subtle glow accent line at bottom */}
+      <div className="absolute bottom-0 left-4 right-4 h-px bg-gradient-to-r from-transparent via-[rgba(var(--accent-rgb),0.2)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
     </div>
   );
 }

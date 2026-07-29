@@ -55,10 +55,39 @@ export default function WeekView({ expenses, currency, weekOffset, setWeekOffset
   const avg = daysWithData ? total / daysWithData : 0;
   const highest = chartData.reduce((max, d) => (d.amount > max.amount ? d : max), chartData[0]);
 
-  // Determine accent color theme for Recharts
-  const accentColor = 'var(--accent)';
+  // Week-over-week comparison
+  const prevBase = addDays(startOfWeek(new Date()), (weekOffset - 1) * 7);
+  const prevKeys = Array.from({ length: 7 }, (_, i) => toKey(addDays(prevBase, i)));
+  const prevTotal = expenses
+    .filter(e => prevKeys.includes(e.date))
+    .reduce((s, e) => s + e.amount, 0);
+  const wowDiff = prevTotal > 0 ? ((total - prevTotal) / prevTotal) * 100 : null;
+
+  const accentColor = '#C9F31D';
   const gridColor = 'rgba(255, 255, 255, 0.05)';
   const tickColor = 'var(--text-secondary)';
+
+  // Custom bar shape with glow for today
+  const CustomBar = (props) => {
+    const { x, y, width, height, payload } = props;
+    if (height === 0) return null;
+    const isToday = payload?.isToday;
+    return (
+      <g>
+        {isToday && (
+          <rect
+            x={x - 2} y={y - 2} width={width + 4} height={height + 4}
+            rx={8} fill={accentColor} opacity={0.15} filter="blur(4px)"
+          />
+        )}
+        <rect
+          x={x} y={y} width={width} height={height}
+          rx={6}
+          fill={isToday ? accentColor : 'rgba(255,255,255,0.18)'}
+        />
+      </g>
+    );
+  };
 
   return (
     <div className="space-y-4 fade-in">
@@ -71,9 +100,16 @@ export default function WeekView({ expenses, currency, weekOffset, setWeekOffset
         >
           <ChevronLeft size={18} />
         </button>
-        <p className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">
-          {fmtShort(days[0])} – {fmtShort(days[6])}
-        </p>
+        <div className="text-center">
+          <p className="text-sm font-semibold tracking-tight text-[var(--text-primary)]">
+            {fmtShort(days[0])} – {fmtShort(days[6])}
+          </p>
+          {wowDiff !== null && (
+            <p className={`text-[11px] font-mono font-bold mt-0.5 ${wowDiff > 0 ? 'text-[var(--danger)]' : 'text-[var(--success)]'}`}>
+              {wowDiff > 0 ? `↑ ${wowDiff.toFixed(0)}% vs last week` : `↓ ${Math.abs(wowDiff).toFixed(0)}% vs last week`}
+            </p>
+          )}
+        </div>
         <button
           onClick={() => setWeekOffset(weekOffset + 1)}
           disabled={weekOffset >= 0}
@@ -86,23 +122,23 @@ export default function WeekView({ expenses, currency, weekOffset, setWeekOffset
 
       {/* Bar Chart Card */}
       <div className="cred-card p-4">
-        <div className="h-[220px]">
+        <div className="h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 10, right: 5, left: -25, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-              <XAxis 
-                dataKey="day" 
-                tick={{ fontSize: 10, fill: tickColor }} 
-                axisLine={false} 
-                tickLine={false} 
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 10, fill: tickColor }}
+                axisLine={false}
+                tickLine={false}
               />
-              <YAxis 
-                tick={{ fontSize: 10, fill: tickColor, fontFamily: 'JetBrains Mono' }} 
-                axisLine={false} 
-                tickLine={false} 
+              <YAxis
+                tick={{ fontSize: 10, fill: tickColor, fontFamily: 'JetBrains Mono' }}
+                axisLine={false}
+                tickLine={false}
               />
               <Tooltip
-                cursor={{ fill: 'rgba(255, 255, 255, 0.03)' }}
+                cursor={{ fill: 'rgba(255, 255, 255, 0.03)', radius: 6 }}
                 contentStyle={{
                   backgroundColor: 'var(--bg-card)',
                   borderColor: 'var(--border-color)',
@@ -113,14 +149,7 @@ export default function WeekView({ expenses, currency, weekOffset, setWeekOffset
                 formatter={(value) => [`${currency}${parseFloat(value).toLocaleString()}`, 'Spent']}
                 labelFormatter={(label, items) => items[0]?.payload?.dateLabel || label}
               />
-              <Bar dataKey="amount" radius={[6, 6, 0, 0]}>
-                {chartData.map((entry, index) => (
-                  <Cell 
-                    key={`cell-${index}`} 
-                    fill={entry.amount === 0 ? 'rgba(255, 255, 255, 0.05)' : (entry.isToday ? accentColor : 'rgba(255, 255, 255, 0.25)')} 
-                  />
-                ))}
-              </Bar>
+              <Bar dataKey="amount" shape={<CustomBar />} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -128,13 +157,13 @@ export default function WeekView({ expenses, currency, weekOffset, setWeekOffset
 
       {/* Stat Cards */}
       <div className="grid grid-cols-3 gap-3">
-        <StatCard 
-          label="Total spent" 
-          value={`${currency}${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} 
+        <StatCard
+          label="Total spent"
+          value={`${currency}${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
         />
-        <StatCard 
-          label="Daily average" 
-          value={`${currency}${avg.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} 
+        <StatCard
+          label="Daily average"
+          value={`${currency}${avg.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
         />
         <StatCard
           label="Highest Day"
@@ -147,3 +176,4 @@ export default function WeekView({ expenses, currency, weekOffset, setWeekOffset
   );
 }
 export { startOfWeek, addDays, toKey };
+

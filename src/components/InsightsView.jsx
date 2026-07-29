@@ -204,58 +204,83 @@ export default function InsightsView({ expenses, currency, getCategoryMeta, peri
         </div>
       ) : (
         <>
-          {/* Donut Chart Card */}
-          <div className="cred-card p-4 flex justify-center items-center">
-            <div className="h-[180px] w-full max-w-[280px]">
+          {/* Donut Chart Card — bigger, centered with total in middle */}
+          <div className="cred-card p-4">
+            <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-3">Spending Breakdown</p>
+            <div className="relative h-[220px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <RePieChart>
-                  <Pie 
-                    data={categoryData} 
-                    dataKey="amount" 
-                    nameKey="name" 
-                    innerRadius={45} 
-                    outerRadius={70} 
+                  <Pie
+                    data={categoryData}
+                    dataKey="amount"
+                    nameKey="name"
+                    innerRadius={65}
+                    outerRadius={95}
                     paddingAngle={3}
+                    startAngle={90}
+                    endAngle={-270}
                   >
                     {categoryData.map((c, i) => (
-                      <Cell key={`cell-${i}`} fill={c.color} stroke="var(--bg-card)" strokeWidth={2} />
+                      <Cell key={`cell-${i}`} fill={c.color} stroke="transparent" strokeWidth={0} />
                     ))}
                   </Pie>
-                  <Tooltip 
+                  <Tooltip
                     contentStyle={{
                       backgroundColor: 'var(--bg-card)',
                       borderColor: 'var(--border-color)',
                       borderRadius: '12px',
-                      color: 'var(--text-primary)'
+                      color: 'var(--text-primary)',
+                      fontSize: '12px'
                     }}
-                    formatter={(v) => [`${currency}${parseFloat(v).toLocaleString()}`, 'Spent']} 
+                    formatter={(v) => [`${currency}${parseFloat(v).toLocaleString()}`, 'Spent']}
                   />
                 </RePieChart>
               </ResponsiveContainer>
+              {/* Center label */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider font-semibold">Total</p>
+                <p className="text-lg font-black font-mono text-[var(--text-primary)] tracking-tight">
+                  {currency}{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Category List */}
-          <div className="cred-card p-4 space-y-3.5">
-            <h3 className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">
-              Category Distribution
-            </h3>
-            {categoryData.map((c) => (
-              <div key={c.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
-                  <p className="text-sm font-medium text-[var(--text-primary)] truncate">{c.name}</p>
+          {/* Animated Category Bars */}
+          <div className="cred-card p-5 space-y-4">
+            <h3 className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Category Distribution</h3>
+            {categoryData.map((c, idx) => {
+              const pct = total ? Math.round((c.amount / total) * 100) : 0;
+              return (
+                <div key={c.name} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold font-mono text-[var(--text-primary)]">
+                        {currency}{c.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </p>
+                      <span className="text-[10px] font-mono text-[var(--text-muted)] w-8 text-right">{pct}%</span>
+                    </div>
+                  </div>
+                  {/* Animated bar */}
+                  <div className="h-1.5 w-full bg-[var(--bg-input)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: c.color,
+                        boxShadow: `0 0 8px ${c.color}60`,
+                        animation: `slideInItem 0.7s cubic-bezier(0.16,1,0.3,1) ${idx * 80}ms both`,
+                        transformOrigin: 'left center',
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <p className="text-sm font-bold font-mono text-[var(--text-primary)]">
-                    {currency}{c.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-xs font-mono text-[var(--text-secondary)] w-10 text-right">
-                    {total ? Math.round((c.amount / total) * 100) : 0}%
-                  </p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* AI Wealth Companion Insights Panel (Pulse effect) */}

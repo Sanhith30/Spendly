@@ -1,34 +1,79 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+
+function RingMeter({ percent, color, glow }) {
+  const radius = 40;
+  const stroke = 7;
+  const circumference = 2 * Math.PI * radius;
+  const normalizedPercent = Math.min(Math.max(percent, 0), 100);
+  const offset = circumference - (normalizedPercent / 100) * circumference;
+
+  const circleRef = useRef(null);
+
+  useEffect(() => {
+    if (!circleRef.current) return;
+    circleRef.current.style.strokeDashoffset = circumference;
+    // Animate to final offset
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (circleRef.current) {
+          circleRef.current.style.transition = 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)';
+          circleRef.current.style.strokeDashoffset = offset;
+        }
+      });
+    });
+  }, [offset, circumference]);
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: 100, height: 100 }}>
+      <svg width="100" height="100" viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)' }}>
+        {/* Track */}
+        <circle
+          cx="50" cy="50" r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.05)"
+          strokeWidth={stroke}
+        />
+        {/* Progress */}
+        <circle
+          ref={circleRef}
+          cx="50" cy="50" r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference}
+          style={{ filter: `drop-shadow(0 0 6px ${glow})` }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-sm font-black font-mono text-[var(--text-primary)]">{normalizedPercent}%</span>
+        <span className="text-[9px] text-[var(--text-muted)] font-semibold uppercase tracking-wide">used</span>
+      </div>
+    </div>
+  );
+}
 
 export default function BudgetCard({ budget, spent, currency, onSetBudget }) {
   const isConfigured = budget > 0;
   const remaining = budget - spent;
-  const percent = isConfigured ? Math.min(Math.round((spent / budget) * 100), 150) : 0;
+  const percent = isConfigured ? Math.min(Math.round((spent / budget) * 100), 100) : 0;
 
-  // Determine progress color
-  let progressColor = 'bg-[var(--success)]';
-  let progressGlow = 'rgba(16, 185, 129, 0.3)';
+  // Color thresholds
+  let ringColor = '#10b981';
+  let ringGlow = 'rgba(16,185,129,0.5)';
   if (percent >= 90) {
-    progressColor = 'bg-[var(--danger)]';
-    progressGlow = 'rgba(239, 68, 68, 0.3)';
+    ringColor = '#ef4444';
+    ringGlow = 'rgba(239,68,68,0.5)';
   } else if (percent >= 70) {
-    progressColor = 'bg-[var(--warning)]';
-    progressGlow = 'rgba(245, 158, 11, 0.3)';
+    ringColor = '#f59e0b';
+    ringGlow = 'rgba(245,158,11,0.5)';
   }
 
   return (
     <div className="cred-card col-span-full">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Monthly Budget</h3>
-          {isConfigured ? (
-            <p className="text-2xl font-bold font-mono text-[var(--text-primary)] mt-1">
-              {currency}{spent.toLocaleString()} <span className="text-xs font-normal text-[var(--text-secondary)]">of {currency}{budget.toLocaleString()}</span>
-            </p>
-          ) : (
-            <p className="text-sm font-medium text-[var(--text-secondary)] mt-1">No monthly budget set yet.</p>
-          )}
-        </div>
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Monthly Budget</h3>
         <button
           onClick={onSetBudget}
           className="text-xs text-[var(--accent)] hover:underline font-semibold"
@@ -38,35 +83,41 @@ export default function BudgetCard({ budget, spent, currency, onSetBudget }) {
       </div>
 
       {isConfigured ? (
-        <div className="space-y-2">
-          {/* Progress bar container */}
-          <div className="h-2 w-full bg-[var(--bg-input)] rounded-full overflow-hidden border border-[var(--border-color)]">
+        <div className="flex items-center gap-5">
+          {/* Animated SVG ring */}
+          <RingMeter percent={percent} color={ringColor} glow={ringGlow} />
+
+          {/* Labels */}
+          <div className="flex-1 space-y-2">
+            <div>
+              <p className="text-2xl font-black font-mono text-[var(--text-primary)] tracking-tight">
+                {currency}{spent.toLocaleString()}
+              </p>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                of <span className="font-semibold">{currency}{budget.toLocaleString()}</span> budget
+              </p>
+            </div>
             <div
-              className={`h-full rounded-full transition-all duration-500 ease-out ${progressColor}`}
+              className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg inline-flex"
               style={{
-                width: `${Math.min(percent, 100)}%`,
-                boxShadow: `0 0 10px ${progressGlow}`
+                backgroundColor: remaining >= 0 ? `${ringColor}18` : 'rgba(239,68,68,0.12)',
+                color: remaining >= 0 ? ringColor : '#ef4444',
+                border: `1px solid ${remaining >= 0 ? ringColor : '#ef4444'}30`
               }}
-            />
-          </div>
-          <div className="flex justify-between items-center text-xs font-mono">
-            <span className="text-[var(--text-secondary)]">
-              {percent}% spent
-            </span>
-            <span className={remaining >= 0 ? 'text-[var(--text-secondary)]' : 'text-[var(--danger)] font-bold'}>
-              {remaining >= 0 
-                ? `${currency}${remaining.toLocaleString()} remaining` 
-                : `Overspent by ${currency}${Math.abs(remaining).toLocaleString()}`
+            >
+              {remaining >= 0
+                ? `${currency}${remaining.toLocaleString()} remaining`
+                : `Overspent ${currency}${Math.abs(remaining).toLocaleString()}`
               }
-            </span>
+            </div>
           </div>
         </div>
       ) : (
         <button
           onClick={onSetBudget}
-          className="w-full mt-2 text-center text-xs py-2 bg-[var(--bg-input)] rounded-lg hover:bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-secondary)]"
+          className="w-full mt-2 text-center text-xs py-2.5 bg-[var(--bg-input)] rounded-xl hover:bg-[var(--bg-secondary)] border border-dashed border-[var(--border-color)] text-[var(--text-secondary)] hover:border-[var(--accent)]/40 hover:text-[var(--accent)] transition-all duration-200"
         >
-          Set up a budget to track progress
+          Set up a budget to track progress →
         </button>
       )}
     </div>

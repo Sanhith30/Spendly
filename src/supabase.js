@@ -14,33 +14,72 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Generate or retrieve a unique client_id for data isolation without full auth
-function getClientId() {
-  let clientId = localStorage.getItem('moneytracker_client_id');
-  if (!clientId) {
-    clientId = 'client-' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    localStorage.setItem('moneytracker_client_id', clientId);
-  }
-  return clientId;
+// ─── Auth Helpers ──────────────────────────────────────────────────────────
+
+export const auth = {
+  async signUp(email, password) {
+    if (!supabase) throw new Error('Supabase not configured');
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    return data;
+  },
+
+  async signIn(email, password) {
+    if (!supabase) throw new Error('Supabase not configured');
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
+  },
+
+  async signOut() {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+  },
+
+  async getSession() {
+    if (!supabase) return null;
+    const { data: { session } } = await supabase.auth.getSession();
+    return session;
+  },
+
+  onAuthStateChange(callback) {
+    if (!supabase) return { data: { subscription: { unsubscribe: () => {} } } };
+    return supabase.auth.onAuthStateChange(callback);
+  },
+
+  async resetPassword(email) {
+    if (!supabase) throw new Error('Supabase not configured');
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) throw error;
+  },
+};
+
+// ─── Get current user_id ───────────────────────────────────────────────────
+
+async function getUserId() {
+  if (!supabase) return null;
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user?.id || null;
 }
 
-export const CLIENT_ID = getClientId();
+// ─── Storage API Helper ────────────────────────────────────────────────────
+// Falls back to LocalStorage if Supabase is not configured or user is not logged in.
 
-/**
- * Storage API Helper
- * Falls back to LocalStorage if Supabase is not configured or fails.
- */
 export const db = {
   isSupabase: () => !!supabase,
 
   // Load all expenses
   async getExpenses() {
-    if (supabase) {
+    const userId = await getUserId();
+    if (supabase && userId) {
       try {
         const { data, error } = await supabase
           .from('expenses')
           .select('*')
-          .eq('client_id', CLIENT_ID)
+          .eq('user_id', userId)
           .order('date', { ascending: false });
         if (error) throw error;
         return data || [];
@@ -54,19 +93,21 @@ export const db = {
 
   // Save an expense
   async saveExpense(expense) {
-    const nextExpense = { ...expense, client_id: CLIENT_ID };
-    if (supabase) {
+    const userId = await getUserId();
+    const nextExpense = { ...expense, user_id: userId };
+    if (supabase && userId) {
       try {
         const { error } = await supabase
           .from('expenses')
           .upsert(nextExpense);
         if (error) throw error;
+        return; // Skip localStorage when Supabase succeeds
       } catch (err) {
         console.error('Supabase saveExpense failed, falling back to localStorage:', err);
       }
     }
-    // Always keep localStorage updated as fallback
-    const localExpenses = await this.getExpenses();
+    // Fallback: keep localStorage updated
+    const localExpenses = JSON.parse(localStorage.getItem('moneytracker_expenses') || '[]');
     const index = localExpenses.findIndex((e) => e.id === expense.id);
     if (index > -1) {
       localExpenses[index] = nextExpense;
@@ -78,32 +119,35 @@ export const db = {
 
   // Delete an expense
   async deleteExpense(id) {
-    if (supabase) {
+    const userId = await getUserId();
+    if (supabase && userId) {
       try {
         const { error } = await supabase
           .from('expenses')
           .delete()
           .eq('id', id)
-          .eq('client_id', CLIENT_ID);
+          .eq('user_id', userId);
         if (error) throw error;
+        return;
       } catch (err) {
         console.error('Supabase deleteExpense failed, falling back to localStorage:', err);
       }
     }
-    const localExpenses = await this.getExpenses();
+    const localExpenses = JSON.parse(localStorage.getItem('moneytracker_expenses') || '[]');
     const filtered = localExpenses.filter((e) => e.id !== id);
     localStorage.setItem('moneytracker_expenses', JSON.stringify(filtered));
   },
 
   // Load app settings (budget, income, custom categories, currency, etc)
   async getSettings() {
-    if (supabase) {
+    const userId = await getUserId();
+    if (supabase && userId) {
       try {
         const { data, error } = await supabase
           .from('settings')
           .select('*')
-          .eq('client_id', CLIENT_ID)
-          .maybeSingle(); // Use maybeSingle to avoid PGRST116 errors as exceptions
+          .eq('user_id', userId)
+          .maybeSingle();
         if (error) throw error;
         if (data) return data;
       } catch (err) {
@@ -116,17 +160,19 @@ export const db = {
 
   // Save settings
   async saveSettings(settingsData) {
+    const userId = await getUserId();
     const payload = {
       ...settingsData,
-      client_id: CLIENT_ID,
+      user_id: userId,
       updated_at: new Date().toISOString()
     };
-    if (supabase) {
+    if (supabase && userId) {
       try {
         const { error } = await supabase
           .from('settings')
           .upsert(payload);
         if (error) throw error;
+        return;
       } catch (err) {
         console.error('Supabase saveSettings failed, falling back to localStorage:', err);
       }

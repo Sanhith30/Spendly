@@ -100,13 +100,16 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Premium UI elements */
 .cred-card {
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 18px;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.05);
   padding: 20px;
   position: relative;
   overflow: hidden;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .cred-card::before {
@@ -116,12 +119,35 @@ h1, h2, h3, h4, h5, h6 {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
 }
 
 .cred-card:hover {
-  border-color: rgba(var(--accent-rgb), 0.2);
-  box-shadow: var(--shadow-md);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  box-shadow: var(--shadow-md), 0 0 30px rgba(var(--accent-rgb), 0.05), inset 0 1px 0 rgba(255,255,255,0.07);
+  transform: translateY(-1px);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Glass card variant */
+.glass-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 60%);
+  pointer-events: none;
 }
 
 .cred-btn-primary {
@@ -220,11 +246,15 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Animation classes */
 .fade-in {
-  animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .slide-up {
-  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.slide-in-item {
+  animation: slideInItem 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes fadeIn {
@@ -235,6 +265,135 @@ h1, h2, h3, h4, h5, h6 {
 @keyframes slideUp {
   from { transform: translateY(20px); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInItem {
+  from { transform: translateX(-16px) scale(0.97); opacity: 0; }
+  to { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+@keyframes ringGrow {
+  from { stroke-dashoffset: 502; }
+}
+
+@keyframes glowPulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(201,243,29,0.4)); }
+  50% { filter: drop-shadow(0 0 14px rgba(201,243,29,0.8)); }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Swipe-to-delete container */
+.swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.swipe-row-inner {
+  position: relative;
+  z-index: 1;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--bg-card);
+  border-radius: 18px;
+}
+
+.swipe-delete-bg {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  background: linear-gradient(to left, rgba(239,68,68,0.9), rgba(239,68,68,0.6));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 18px 18px 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.swipe-row.swiped .swipe-row-inner {
+  transform: translateX(-80px);
+}
+
+.swipe-row.swiped .swipe-delete-bg {
+  opacity: 1;
+}
+
+/* Toast slide-down */
+@keyframes slideDown {
+  from { transform: translateY(-20px) scale(0.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* Page tab transitions */
+.tab-enter {
+  animation: tabFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Confetti particle */
+@keyframes confettiFall {
+  0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(120px) rotate(720deg); opacity: 0; }
+}
+
+.confetti-particle {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  animation: confettiFall 1.2s ease-out forwards;
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* Pull-to-refresh spinner */
+.ptr-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 40px;
+  overflow: hidden;
+  transition: height 0.3s ease;
+}
+
+/* Bank-card stripe */
+.expense-stripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 18px 0 0 18px;
+}
+
+/* FAB Quick Menu */
+.fab-menu-item {
+  animation: fabItemIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fabItemIn {
+  from { transform: scale(0.7) translateY(10px); opacity: 0; }
+  to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* Streak badge pulse */
+@keyframes streakPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201,243,29,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(201,243,29,0); }
+}
+
+.streak-badge {
+  animation: streakPulse 2s ease-in-out infinite;
 }
 
 /* Print CSS setup for native PDF Export */
