@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Settings, Sun, Moon, LogOut } from 'lucide-react';
+import { Settings, Sun, Moon, LogOut, Sparkles } from 'lucide-react';
+import { CURRENCIES } from '../utils/currency';
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -24,7 +25,16 @@ function getAvatarColor(email) {
   return colors[Math.abs(hash) % colors.length];
 }
 
-export default function Header({ darkMode, setDarkMode, onSettings, onSignOut, userEmail }) {
+export default function Header({
+  darkMode,
+  setDarkMode,
+  onSettings,
+  onSignOut,
+  userEmail,
+  currency = '₹',
+  onCurrencyChange,
+  onOpenWrapped
+}) {
   const greeting = useMemo(getGreeting, []);
   const initials = getInitials(userEmail);
   const avatarColor = getAvatarColor(userEmail);
@@ -55,7 +65,42 @@ export default function Header({ darkMode, setDarkMode, onSettings, onSignOut, u
           )}
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {/* Spendly Wrapped Story Button */}
+          {onOpenWrapped && (
+            <button
+              onClick={onOpenWrapped}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black text-black tracking-wide shadow-md transition-all hover:scale-105 active:scale-95 animate-pulse"
+              style={{
+                background: 'linear-gradient(135deg, #C9F31D 0%, #a78bfa 100%)',
+                boxShadow: '0 0 12px rgba(201,243,29,0.3)',
+              }}
+              title="View 2026 Year-in-Review Wrapped"
+            >
+              <Sparkles size={13} />
+              <span>Wrapped</span>
+            </button>
+          )}
+
+          {/* Quick Currency Selector Pill with Live FX Indicator */}
+          {onCurrencyChange && (
+            <div className="relative flex items-center bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl px-2 py-1 gap-1 text-xs font-mono font-semibold text-[var(--text-primary)] hover:border-[var(--text-muted)] transition">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" title="Live FX Rates Synced" />
+              <select
+                value={currency}
+                onChange={(e) => onCurrencyChange(e.target.value)}
+                className="bg-transparent text-[var(--text-primary)] font-bold outline-none cursor-pointer text-xs pr-1"
+                aria-label="Display Currency"
+              >
+                {CURRENCIES.map(c => (
+                  <option key={c.code} value={c.symbol} className="bg-[var(--bg-card)] text-[var(--text-primary)]">
+                    {c.symbol} {c.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Dark mode toggle */}
           <button
             onClick={() => setDarkMode(!darkMode)}

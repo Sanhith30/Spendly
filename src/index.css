@@ -215,6 +215,51 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.1);
 }
 
+/* Hide browser number input spinners everywhere */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* Big amount input for expense modal */
+.amount-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 56px;
+  font-weight: 900;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: -2px;
+  text-align: center;
+  color: var(--text-primary);
+  width: 100%;
+  caret-color: var(--accent);
+}
+
+.amount-input::placeholder {
+  color: rgba(255,255,255,0.15);
+}
+
+/* Input focus glow animation */
+@keyframes focusGlow {
+  from { box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.4); }
+  to   { box-shadow: 0 0 0 6px rgba(var(--accent-rgb), 0); }
+}
+
+.cred-input:focus {
+  animation: focusGlow 0.4s ease-out;
+}
+
+/* Micro-interaction: button press scale */
+.press-scale:active {
+  transform: scale(0.96);
+  transition: transform 0.1s ease;
+}
+
 /* Custom Calendar Heatmap Grid */
 .calendar-heatmap-cell {
   aspect-ratio: 1;

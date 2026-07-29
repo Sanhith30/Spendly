@@ -14,10 +14,13 @@ import CalendarView from './components/CalendarView';
 import SearchView from './components/SearchView';
 import AuthModal from './components/AuthModal';
 import Confetti from './components/Confetti';
+import YearWrappedModal from './components/YearWrappedModal';
 import { useToast } from './components/Toast';
 import { db, auth } from './supabase';
 import { CATEGORY_ICONS } from './components/ExpenseFormModal';
 import { Wallet } from 'lucide-react';
+import { playDeleteSound, playSuccessSound } from './utils/sounds';
+import { scheduleNextReminder } from './utils/reminder';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Breakfast', color: '#C17817' },
@@ -55,6 +58,7 @@ export default function App() {
   const [showFabMenu, setShowFabMenu] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
+  const [showWrapped, setShowWrapped] = useState(false);
 
   // Toast
   const toast = useToast();
@@ -84,6 +88,8 @@ export default function App() {
 
   // Check existing auth session on mount + subscribe to changes
   useEffect(() => {
+    scheduleNextReminder();
+
     async function initAuth() {
       const session = await auth.getSession();
       setUser(session?.user || null);
@@ -145,9 +151,9 @@ export default function App() {
         custom_categories: customCategories,
         dark_mode: darkMode
       });
-      setSaveError(false);
+      playSuccessSound();
     } catch (e) {
-      setSaveError(true);
+      console.error('settings save error', e);
     }
   }
 
@@ -216,6 +222,7 @@ export default function App() {
 
   // Delete Expense handler
   async function handleDeleteExpense(id) {
+    playDeleteSound();
     setExpenses(prev => prev.filter(e => e.id !== id));
     try {
       await db.deleteExpense(id);
@@ -335,8 +342,11 @@ export default function App() {
         darkMode={darkMode}
         setDarkMode={handleToggleDarkMode}
         onSettings={() => setShowSettings(true)}
+        onOpenWrapped={() => setShowWrapped(true)}
         userEmail={user?.email}
         streak={streak}
+        currency={currency}
+        onCurrencyChange={(c) => handleSaveSettings({ currency: c, income, budget: monthlyBudgets[currentMonthStr] || 0 })}
         onSignOut={async () => {
           await auth.signOut();
           setUser(null);
@@ -493,6 +503,7 @@ export default function App() {
           onSubmit={handleExpenseSubmit}
           onClose={() => { setShowAddModal(false); setEditingExpense(null); }}
           expense={editingExpense}
+          baseCurrency={currency}
         />
       )}
       {showSettings && (
@@ -504,6 +515,15 @@ export default function App() {
           onSave={handleSaveSettings}
           onClose={() => setShowSettings(false)}
           expenses={expenses}
+        />
+      )}
+      {showWrapped && (
+        <YearWrappedModal
+          expenses={expenses}
+          currency={currency}
+          income={income}
+          onClose={() => setShowWrapped(false)}
+          getCategoryMeta={getCategoryMeta}
         />
       )}
     </div>

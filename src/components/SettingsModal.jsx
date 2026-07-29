@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { X, Download, ShieldCheck, ShieldAlert, RefreshCw, Bell, Clock, Check, AlertCircle } from 'lucide-react';
 import { exportToCSV, exportToPDF } from '../utils/export';
 import { db } from '../supabase';
+import { CURRENCIES, fetchLiveRates } from '../utils/currency';
+import {
+  isReminderEnabled,
+  setReminderEnabled,
+  getReminderTime,
+  setReminderTime,
+  requestNotificationPermission,
+  getNotificationStatus,
+  triggerReminderNotification,
+} from '../utils/reminder';
 
 export default function SettingsModal({
   currency,
@@ -16,15 +26,62 @@ export default function SettingsModal({
   const [incomeVal, setIncomeVal] = useState(String(income));
   const [budgetVal, setBudgetVal] = useState(String(monthlyBudgets[currentMonth] || ''));
   const [error, setError] = useState('');
+  const [fxRates, setFxRates] = useState(null);
 
-  const currencyOptions = ['₹', '$', '€', '£', '¥'];
+  // Reminder states
+  const [reminderOn, setReminderOn] = useState(isReminderEnabled());
+  const [reminderTimeVal, setReminderTimeVal] = useState(getReminderTime());
+  const [notifPermission, setNotifPermission] = useState(getNotificationStatus());
+  const [testSent, setTestSent] = useState(false);
+
   const isSupabase = db.isSupabase();
+
+  useEffect(() => {
+    async function loadRates() {
+      const rates = await fetchLiveRates('INR');
+      setFxRates(rates);
+    }
+    loadRates();
+  }, []);
 
   useEffect(() => {
     setCurrencyVal(currency);
     setIncomeVal(String(income));
     setBudgetVal(String(monthlyBudgets[currentMonth] || ''));
   }, [currency, income, monthlyBudgets, currentMonth]);
+
+  async function handleToggleReminder() {
+    const nextState = !reminderOn;
+
+    if (nextState) {
+      const perm = await requestNotificationPermission();
+      setNotifPermission(perm);
+
+      if (perm === 'granted') {
+        setReminderOn(true);
+        setReminderEnabled(true);
+      } else {
+        setError('Notification permission was blocked or denied by your browser.');
+        setReminderOn(false);
+        setReminderEnabled(false);
+      }
+    } else {
+      setReminderOn(false);
+      setReminderEnabled(false);
+    }
+  }
+
+  function handleTimeChange(e) {
+    const time = e.target.value;
+    setReminderTimeVal(time);
+    setReminderTime(time);
+  }
+
+  function handleSendTestNotif() {
+    triggerReminderNotification();
+    setTestSent(true);
+    setTimeout(() => setTestSent(false), 3000);
+  }
 
   function handleSave() {
     const parsedIncome = parseFloat(incomeVal) || 0;
@@ -92,25 +149,40 @@ export default function SettingsModal({
         </div>
 
         <div className="space-y-5">
-          {/* Currency */}
+          {/* Currency with Live FX rates badge */}
           <div>
-            <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">Currency Symbol</p>
-            <div className="flex gap-2">
-              {currencyOptions.map((opt) => (
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Primary Display Currency</p>
+              <span className="text-[10px] font-mono text-[var(--accent)] flex items-center gap-1">
+                <RefreshCw size={10} className="animate-spin" style={{ animationDuration: '8s' }} /> Live FX Rates Active
+              </span>
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {CURRENCIES.map((c) => (
                 <button
-                  key={opt}
+                  key={c.code}
                   type="button"
-                  onClick={() => setCurrencyVal(opt)}
-                  className={`flex-1 py-3 rounded-xl border text-lg font-semibold font-mono transition ${
-                    currencyVal === opt 
-                      ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/5' 
+                  onClick={() => setCurrencyVal(c.symbol)}
+                  className={`flex flex-col items-center justify-center py-2.5 px-1 rounded-xl border text-center transition ${
+                    currencyVal === c.symbol 
+                      ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10 shadow-[0_0_12px_rgba(201,243,29,0.15)]' 
                       : 'border-[var(--border-color)] text-[var(--text-secondary)] bg-[var(--bg-secondary)] hover:border-[var(--text-muted)]'
                   }`}
                 >
-                  {opt}
+                  <span className="text-lg font-bold font-mono leading-none">{c.symbol}</span>
+                  <span className="text-[10px] font-mono font-semibold opacity-80 mt-1">{c.code}</span>
                 </button>
               ))}
             </div>
+
+            {/* Live rates snippet */}
+            {fxRates && (
+              <div className="mt-2.5 p-3 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[11px] font-mono text-[var(--text-secondary)] flex justify-between items-center">
+                <span>1 USD = ₹{(1 / (fxRates['USD'] || 0.0116)).toFixed(2)} INR</span>
+                <span>1 EUR = ₹{(1 / (fxRates['EUR'] || 0.0107)).toFixed(2)} INR</span>
+                <span>1 GBP = ₹{(1 / (fxRates['GBP'] || 0.0092)).toFixed(2)} INR</span>
+              </div>
+            )}
           </div>
 
           {/* Income */}
@@ -145,6 +217,57 @@ export default function SettingsModal({
                 className="cred-input pl-10"
               />
             </div>
+          </div>
+
+          {/* Daily Evening Expense Reminder Section */}
+          <div className="cred-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell size={18} className="text-[var(--accent)]" />
+                <div>
+                  <p className="text-xs font-bold text-[var(--text-primary)]">Daily Evening Reminder</p>
+                  <p className="text-[11px] text-[var(--text-secondary)]">Reminds you to log daily expenses</p>
+                </div>
+              </div>
+
+              {/* Toggle Switch */}
+              <button
+                type="button"
+                onClick={handleToggleReminder}
+                className={`w-12 h-6 rounded-full transition-colors relative ${
+                  reminderOn ? 'bg-[var(--accent)]' : 'bg-white/10'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 rounded-full bg-black absolute top-0.5 transition-transform ${
+                    reminderOn ? 'right-0.5' : 'left-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {reminderOn && (
+              <div className="pt-2 border-t border-[var(--border-color)] flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <Clock size={14} className="text-[var(--text-secondary)]" />
+                  <span className="text-[var(--text-secondary)] font-medium">Reminder Time:</span>
+                  <input
+                    type="time"
+                    value={reminderTimeVal}
+                    onChange={handleTimeChange}
+                    className="bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[var(--text-primary)] font-mono font-bold rounded-lg px-2 py-1 outline-none text-xs"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSendTestNotif}
+                  className="px-2.5 py-1 rounded-lg bg-[var(--bg-secondary)] hover:bg-white/10 border border-[var(--border-color)] text-[11px] font-semibold text-[var(--text-primary)] transition"
+                >
+                  {testSent ? '✓ Sent!' : 'Test Push'}
+                </button>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-xs text-[var(--danger)] font-medium">{error}</p>}
