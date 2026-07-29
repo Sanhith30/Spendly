@@ -99,7 +99,7 @@ export const db = {
       try {
         const { error } = await supabase
           .from('expenses')
-          .upsert(nextExpense);
+          .upsert(nextExpense, { onConflict: 'id' });
         if (error) throw error;
         return; // Skip localStorage when Supabase succeeds
       } catch (err) {
@@ -170,7 +170,7 @@ export const db = {
       try {
         const { error } = await supabase
           .from('settings')
-          .upsert(payload);
+          .upsert(payload, { onConflict: 'user_id' });
         if (error) throw error;
         return;
       } catch (err) {
