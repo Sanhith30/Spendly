@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-// Detect if Supabase is properly configured
 const isSupabaseConfigured =
   supabaseUrl &&
   supabaseAnonKey &&
@@ -65,13 +64,41 @@ async function getUserId() {
   return session?.user?.id || null;
 }
 
-// ─── Storage API Helper ────────────────────────────────────────────────────
-// Falls back to LocalStorage if Supabase is not configured or user is not logged in.
+// ─── Field name mappers (JS camelCase <-> DB snake_case) ──────────────────
+// The DB uses snake_case (created_at) but JS objects use camelCase (createdAt).
+// Without this mapping, upsert sends unknown columns and silently fails.
+
+function toDbExpense(expense, userId) {
+  return {
+    id: expense.id,
+    date: expense.date,
+    category: expense.category,
+    amount: expense.amount,
+    note: expense.note || '',
+    user_id: userId,
+    created_at: expense.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function fromDbExpense(row) {
+  return {
+    id: row.id,
+    date: row.date,
+    category: row.category,
+    amount: Number(row.amount),
+    note: row.note || '',
+    user_id: row.user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// ─── Storage API ────────────────────────────────────────────────────────────
 
 export const db = {
   isSupabase: () => !!supabase,
 
-  // Load all expenses
   async getExpenses() {
     const userId = await getUserId();
     if (supabase && userId) {
@@ -82,42 +109,37 @@ export const db = {
           .eq('user_id', userId)
           .order('date', { ascending: false });
         if (error) throw error;
-        return data || [];
+        return (data || []).map(fromDbExpense);
       } catch (err) {
-        console.error('Supabase getExpenses failed, loading from localStorage:', err);
+        console.error('Supabase getExpenses failed:', err);
       }
     }
     const local = localStorage.getItem('moneytracker_expenses');
     return local ? JSON.parse(local) : [];
   },
 
-  // Save an expense
   async saveExpense(expense) {
     const userId = await getUserId();
-    const nextExpense = { ...expense, user_id: userId };
     if (supabase && userId) {
       try {
+        const dbRow = toDbExpense(expense, userId);
         const { error } = await supabase
           .from('expenses')
-          .upsert(nextExpense, { onConflict: 'id' });
+          .upsert(dbRow, { onConflict: 'id' });
         if (error) throw error;
-        return; // Skip localStorage when Supabase succeeds
+        return;
       } catch (err) {
-        console.error('Supabase saveExpense failed, falling back to localStorage:', err);
+        console.error('Supabase saveExpense failed:', err);
       }
     }
-    // Fallback: keep localStorage updated
-    const localExpenses = JSON.parse(localStorage.getItem('moneytracker_expenses') || '[]');
-    const index = localExpenses.findIndex((e) => e.id === expense.id);
-    if (index > -1) {
-      localExpenses[index] = nextExpense;
-    } else {
-      localExpenses.push(nextExpense);
-    }
-    localStorage.setItem('moneytracker_expenses', JSON.stringify(localExpenses));
+    // Fallback to localStorage
+    const local = JSON.parse(localStorage.getItem('moneytracker_expenses') || '[]');
+    const idx = local.findIndex((e) => e.id === expense.id);
+    if (idx > -1) local[idx] = expense;
+    else local.push(expense);
+    localStorage.setItem('moneytracker_expenses', JSON.stringify(local));
   },
 
-  // Delete an expense
   async deleteExpense(id) {
     const userId = await getUserId();
     if (supabase && userId) {
@@ -130,15 +152,13 @@ export const db = {
         if (error) throw error;
         return;
       } catch (err) {
-        console.error('Supabase deleteExpense failed, falling back to localStorage:', err);
+        console.error('Supabase deleteExpense failed:', err);
       }
     }
-    const localExpenses = JSON.parse(localStorage.getItem('moneytracker_expenses') || '[]');
-    const filtered = localExpenses.filter((e) => e.id !== id);
-    localStorage.setItem('moneytracker_expenses', JSON.stringify(filtered));
+    const local = JSON.parse(localStorage.getItem('moneytracker_expenses') || '[]');
+    localStorage.setItem('moneytracker_expenses', JSON.stringify(local.filter((e) => e.id !== id)));
   },
 
-  // Load app settings (budget, income, custom categories, currency, etc)
   async getSettings() {
     const userId = await getUserId();
     if (supabase && userId) {
@@ -151,20 +171,19 @@ export const db = {
         if (error) throw error;
         if (data) return data;
       } catch (err) {
-        console.error('Supabase getSettings failed, loading from localStorage:', err);
+        console.error('Supabase getSettings failed:', err);
       }
     }
     const local = localStorage.getItem('moneytracker_settings');
     return local ? JSON.parse(local) : {};
   },
 
-  // Save settings
   async saveSettings(settingsData) {
     const userId = await getUserId();
     const payload = {
       ...settingsData,
       user_id: userId,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
     if (supabase && userId) {
       try {
@@ -174,9 +193,9 @@ export const db = {
         if (error) throw error;
         return;
       } catch (err) {
-        console.error('Supabase saveSettings failed, falling back to localStorage:', err);
+        console.error('Supabase saveSettings failed:', err);
       }
     }
     localStorage.setItem('moneytracker_settings', JSON.stringify(payload));
-  }
+  },
 };
