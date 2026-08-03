@@ -35,7 +35,7 @@ function useAnimatedNumber(target) {
   return display;
 }
 
-export default function StatCard({ label, value, sub, trend, trendType, rawAmount }) {
+export default function StatCard({ label, value = '', sub, trend, trendType, rawAmount }) {
   const isUp = trendType === 'up';
   const isDown = trendType === 'down';
   const isSuccess = trendType === 'success';
@@ -47,13 +47,15 @@ export default function StatCard({ label, value, sub, trend, trendType, rawAmoun
 
   const animatedNum = useAnimatedNumber(rawAmount ?? 0);
   
-  // Format numeric display value properly without double negative signs
-  let displayValue = value;
-  if (rawAmount !== undefined) {
+  // Safe string conversion for value to prevent TypeError on .match()
+  const valStr = String(value ?? '');
+  let displayValue = valStr;
+
+  if (rawAmount !== undefined && rawAmount !== null) {
     const isNegative = animatedNum < 0;
     const absFormatted = Math.abs(animatedNum).toLocaleString();
-    // Match currency symbol from string (non-digit, non-minus, non-comma)
-    const currencyMatch = value.match(/^[^\d\-]+/);
+    // Safely match currency symbol from string (non-digit, non-minus, non-comma)
+    const currencyMatch = valStr.match(/^[^\d\-]+/);
     const currSymbol = currencyMatch ? currencyMatch[0] : '';
     displayValue = isNegative ? `-${currSymbol}${absFormatted}` : `${currSymbol}${absFormatted}`;
   }

@@ -15,6 +15,7 @@ import SearchView from './components/SearchView';
 import AuthModal from './components/AuthModal';
 import Confetti from './components/Confetti';
 import YearWrappedModal from './components/YearWrappedModal';
+import UserProfileModal from './components/UserProfileModal';
 import { useToast } from './components/Toast';
 import { db, auth } from './supabase';
 import { CATEGORY_ICONS } from './components/ExpenseFormModal';
@@ -22,12 +23,44 @@ import { Wallet } from 'lucide-react';
 import { playDeleteSound, playSuccessSound } from './utils/sounds';
 import { scheduleNextReminder } from './utils/reminder';
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('ErrorBoundary caught error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-center cred-card m-4 border-amber-500/30">
+          <h3 className="text-base font-bold text-[var(--danger)] mb-2">Display Notice</h3>
+          <p className="text-xs text-[var(--text-secondary)] mb-4">{this.state.error?.message || 'An unexpected rendering condition occurred.'}</p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); window.location.reload(); }}
+            className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-text)] rounded-xl text-xs font-bold shadow-lg"
+          >
+            Reload Tab
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const DEFAULT_CATEGORIES = [
   { name: 'Breakfast', color: '#C17817' },
   { name: 'Tea', color: '#8B5A2B' },
   { name: 'Lunch', color: '#B5502F' },
   { name: 'Snacks', color: '#7A5C8E' },
   { name: 'Dinner', color: '#3B4C6B' },
+  { name: 'House Rent', color: '#10B981' },
+  { name: 'Electricity', color: '#F59E0B' },
   { name: 'Other', color: '#8A8578' },
 ];
 
@@ -59,6 +92,13 @@ export default function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [confettiTrigger, setConfettiTrigger] = useState(0);
   const [showWrapped, setShowWrapped] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [userName, setUserName] = useState(() => {
+    return localStorage.getItem('spendly_user_name') || '';
+  });
+  const [profilePic, setProfilePic] = useState(() => {
+    return localStorage.getItem('spendly_profile_pic') || null;
+  });
 
   // Toast
   const toast = useToast();
@@ -343,7 +383,10 @@ export default function App() {
         setDarkMode={handleToggleDarkMode}
         onSettings={() => setShowSettings(true)}
         onOpenWrapped={() => setShowWrapped(true)}
+        onOpenProfile={() => setShowProfileModal(true)}
         userEmail={user?.email}
+        userName={userName}
+        profilePic={profilePic}
         streak={streak}
         currency={currency}
         onCurrencyChange={(c) => handleSaveSettings({ currency: c, income, budget: monthlyBudgets[currentMonthStr] || 0 })}
@@ -404,33 +447,35 @@ export default function App() {
         )}
 
         {/* Tab views — key forces re-mount for enter animation */}
-        <div key={tabKey} className="tab-enter">
-          {activeTab === 'today' && (
-            <TodayView
-              expenses={expenses}
-              currency={currency}
-              getCategoryMeta={getCategoryMeta}
-              onEdit={handleEditTrigger}
-              onDelete={handleDeleteExpense}
-              onOpenAdd={() => { setEditingExpense(null); setShowAddModal(true); }}
-            />
-          )}
-          {activeTab === 'week' && (
-            <WeekView expenses={expenses} currency={currency} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />
-          )}
-          {activeTab === 'month' && (
-            <MonthView expenses={expenses} currency={currency} monthOffset={monthOffset} setMonthOffset={setMonthOffset} />
-          )}
-          {activeTab === 'calendar' && (
-            <CalendarView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} onEdit={handleEditTrigger} onDelete={handleDeleteExpense} />
-          )}
-          {activeTab === 'search' && (
-            <SearchView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} onEdit={handleEditTrigger} onDelete={handleDeleteExpense} />
-          )}
-          {activeTab === 'insights' && (
-            <InsightsView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} period={insightPeriod} setPeriod={setInsightPeriod} monthlyBudgets={monthlyBudgets} />
-          )}
-        </div>
+        <ErrorBoundary key={activeTab}>
+          <div key={tabKey} className="tab-enter">
+            {activeTab === 'today' && (
+              <TodayView
+                expenses={expenses}
+                currency={currency}
+                getCategoryMeta={getCategoryMeta}
+                onEdit={handleEditTrigger}
+                onDelete={handleDeleteExpense}
+                onOpenAdd={() => { setEditingExpense(null); setShowAddModal(true); }}
+              />
+            )}
+            {activeTab === 'week' && (
+              <WeekView expenses={expenses} currency={currency} weekOffset={weekOffset} setWeekOffset={setWeekOffset} />
+            )}
+            {activeTab === 'month' && (
+              <MonthView expenses={expenses} currency={currency} monthOffset={monthOffset} setMonthOffset={setMonthOffset} />
+            )}
+            {activeTab === 'calendar' && (
+              <CalendarView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} onEdit={handleEditTrigger} onDelete={handleDeleteExpense} />
+            )}
+            {activeTab === 'search' && (
+              <SearchView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} onEdit={handleEditTrigger} onDelete={handleDeleteExpense} />
+            )}
+            {activeTab === 'insights' && (
+              <InsightsView expenses={expenses} currency={currency} getCategoryMeta={getCategoryMeta} period={insightPeriod} setPeriod={setInsightPeriod} monthlyBudgets={monthlyBudgets} />
+            )}
+          </div>
+        </ErrorBoundary>
       </main>
 
       {/* Quick-add FAB menu */}
@@ -524,6 +569,27 @@ export default function App() {
           income={income}
           onClose={() => setShowWrapped(false)}
           getCategoryMeta={getCategoryMeta}
+        />
+      )}
+      {showProfileModal && (
+        <UserProfileModal
+          userEmail={user?.email}
+          userName={userName}
+          setUserName={setUserName}
+          profilePic={profilePic}
+          setProfilePic={setProfilePic}
+          expenses={expenses}
+          currency={currency}
+          onCurrencyChange={(c) => handleSaveSettings({ currency: c, income, budget: monthlyBudgets[currentMonthStr] || 0 })}
+          darkMode={darkMode}
+          setDarkMode={handleToggleDarkMode}
+          onSignOut={async () => {
+            await auth.signOut();
+            setUser(null);
+            setExpenses([]);
+            toast('Signed out successfully', 'info');
+          }}
+          onClose={() => setShowProfileModal(false)}
         />
       )}
     </div>

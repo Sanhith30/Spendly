@@ -1,4 +1,4 @@
-// Daily Expense Reminder Utility using Web Notifications API
+// Daily Expense Reminder Utility using Web Notifications API & In-App Fallbacks
 
 const REMINDER_KEY = 'moneytracker_reminder_enabled';
 const REMINDER_TIME_KEY = 'moneytracker_reminder_time'; // Default "21:00"
@@ -15,10 +15,18 @@ export async function requestNotificationPermission() {
   }
 
   try {
+    // Promise-based request (Modern Chrome, Firefox, Edge, Safari 16.4+)
     const permission = await Notification.requestPermission();
     return permission;
   } catch (e) {
-    return 'denied';
+    // Callback-based fallback for older browsers / iOS Safari
+    return new Promise((resolve) => {
+      try {
+        Notification.requestPermission((perm) => resolve(perm));
+      } catch (err) {
+        resolve('denied');
+      }
+    });
   }
 }
 
@@ -55,8 +63,23 @@ export function setReminderTime(timeStr) {
   }
 }
 
-export function triggerReminderNotification() {
-  if (!isNotificationSupported() || Notification.permission !== 'granted') return;
+export async function triggerReminderNotification(fallbackToastFn = null) {
+  if (!isNotificationSupported()) {
+    if (fallbackToastFn) fallbackToastFn('Did you log your expenses today? 🔥', 'warning');
+    return false;
+  }
+
+  let perm = Notification.permission;
+  if (perm === 'default') {
+    perm = await requestNotificationPermission();
+  }
+
+  if (perm !== 'granted') {
+    if (fallbackToastFn) {
+      fallbackToastFn('Browser notifications blocked. Enable in site settings! 🔔', 'warning');
+    }
+    return false;
+  }
 
   try {
     const title = '💰 LEDGER — Daily Reminder';
@@ -66,17 +89,22 @@ export function triggerReminderNotification() {
       badge: '/favicon.ico',
       tag: 'daily-expense-reminder',
       renotify: true,
+      vibrate: [200, 100, 200],
     };
 
     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.ready.then((reg) => {
-        reg.showNotification(title, options);
-      });
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, options);
     } else {
       new Notification(title, options);
     }
+    return true;
   } catch (e) {
-    console.error('Failed to trigger notification:', e);
+    console.warn('Native notification failed, attempting fallback:', e);
+    if (fallbackToastFn) {
+      fallbackToastFn('Did you log your expenses today? 🔥', 'info');
+    }
+    return false;
   }
 }
 
@@ -87,25 +115,25 @@ function getMsUntilTime(timeStr) {
   target.setHours(hours, minutes, 0, 0);
 
   if (target.getTime() <= now.getTime()) {
-    // Target time already passed today, schedule for tomorrow
+    // Target time passed today, schedule for tomorrow
     target.setDate(target.getDate() + 1);
   }
 
   return target.getTime() - now.getTime();
 }
 
-export function scheduleNextReminder() {
+export function scheduleNextReminder(fallbackToastFn = null) {
   clearScheduledReminder();
 
-  if (!isReminderEnabled() || Notification.permission !== 'granted') return;
+  if (!isReminderEnabled()) return;
 
   const timeStr = getReminderTime();
   const msUntilTarget = getMsUntilTime(timeStr);
 
   timerId = setTimeout(() => {
-    triggerReminderNotification();
+    triggerReminderNotification(fallbackToastFn);
     // Re-schedule for next day
-    scheduleNextReminder();
+    scheduleNextReminder(fallbackToastFn);
   }, msUntilTarget);
 }
 

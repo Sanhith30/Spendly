@@ -31,15 +31,19 @@ export default function Header({
   onSettings,
   onSignOut,
   userEmail,
+  userName,
+  profilePic,
   currency = '₹',
   onCurrencyChange,
-  onOpenWrapped
+  onOpenWrapped,
+  onOpenProfile
 }) {
   const greeting = useMemo(getGreeting, []);
-  const initials = getInitials(userEmail);
+  const initials = getInitials(userName || userEmail);
   const avatarColor = getAvatarColor(userEmail);
   const firstName = userEmail ? userEmail.split('@')[0].split(/[._]/)[0] : '';
-  const displayName = firstName ? firstName.charAt(0).toUpperCase() + firstName.slice(1) : '';
+  const defaultDisplayName = firstName ? firstName.charAt(0).toUpperCase() + firstName.slice(1) : '';
+  const headerDisplayName = userName || defaultDisplayName || 'Spendly';
 
   return (
     <header className="border-b border-[var(--border-color)] px-4 sm:px-6 py-3 sticky top-0 z-10 bg-[var(--bg-primary)]/90 backdrop-blur-md">
@@ -52,7 +56,7 @@ export default function Header({
                 {greeting} 👋
               </p>
               <h1 className="text-sm sm:text-lg font-black tracking-tight text-[var(--text-primary)] leading-tight truncate">
-                {displayName || 'LEDGER'}
+                {headerDisplayName}
               </h1>
             </div>
           ) : (
@@ -137,16 +141,21 @@ export default function Header({
 
           {/* User avatar */}
           {userEmail && (
-            <div
-              title={userEmail}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] font-black text-black ml-0.5 cursor-default select-none shrink-0"
+            <button
+              onClick={onOpenProfile}
+              title="Open User Profile & Settings"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] font-black text-black ml-0.5 cursor-pointer hover:scale-110 active:scale-95 transition-all select-none shrink-0 overflow-hidden ring-2 ring-[var(--accent)]/40"
               style={{
-                backgroundColor: avatarColor,
+                backgroundColor: profilePic ? 'transparent' : avatarColor,
                 boxShadow: `0 0 10px ${avatarColor}50`
               }}
             >
-              {initials}
-            </div>
+              {profilePic ? (
+                <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                initials
+              )}
+            </button>
           )}
         </div>
       </div>

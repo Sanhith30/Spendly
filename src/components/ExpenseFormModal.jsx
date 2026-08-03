@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Check, Coffee, UtensilsCrossed, Cookie, Sun, Moon, Wallet, RefreshCw, ArrowRightLeft } from 'lucide-react';
+import { X, Plus, Check, Coffee, UtensilsCrossed, Cookie, Sun, Moon, Wallet, RefreshCw, ArrowRightLeft, Home, Zap } from 'lucide-react';
 import { playCoinSound } from '../utils/sounds';
 import { CURRENCIES, convertAmount, fetchLiveRates } from '../utils/currency';
 
@@ -9,6 +9,8 @@ export const CATEGORY_ICONS = {
   Lunch: UtensilsCrossed,
   Snacks: Cookie,
   Dinner: Moon,
+  'House Rent': Home,
+  Electricity: Zap,
   Other: Wallet,
 };
 
