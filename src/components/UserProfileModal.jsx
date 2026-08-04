@@ -67,27 +67,57 @@ export default function UserProfileModal({
     return name.slice(0, 2).toUpperCase();
   }, [userName, userEmail]);
 
-  // Handle Profile Picture File Upload (converts to Base64)
+  // Compress image to max 200x200 JPEG at 70% quality before saving to Supabase
+  const compressImage = (dataUrl) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_SIZE = 200;
+        let width = img.width;
+        let height = img.height;
+
+        // Scale down to fit within 200x200 while keeping aspect ratio
+        if (width > height) {
+          if (width > MAX_SIZE) { height = Math.round((height * MAX_SIZE) / width); width = MAX_SIZE; }
+        } else {
+          if (height > MAX_SIZE) { width = Math.round((width * MAX_SIZE) / height); height = MAX_SIZE; }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.src = dataUrl;
+    });
+  };
+
+  // Handle Profile Picture File Upload (compresses to ~15-30KB before cloud save)
   const handlePhotoUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast('⚠️ Photo must be smaller than 5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      toast('⚠️ Photo must be smaller than 10MB');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const base64 = event.target.result;
-      setProfilePic(base64);
-      localStorage.setItem('spendly_profile_pic', base64);
       try {
-        await auth.updateUserProfile({ avatar_url: base64 });
+        // Compress first — shrinks from MB to ~20KB
+        const compressed = await compressImage(event.target.result);
+        setProfilePic(compressed);
+        localStorage.setItem('spendly_profile_pic', compressed);
+
+        await auth.updateUserProfile({ avatar_url: compressed });
         toast('Profile photo saved to cloud! 📸☁️');
       } catch (err) {
         console.error('Failed to save photo to Supabase:', err);
-        toast('Photo saved locally (cloud sync failed)');
+        // Still show the photo locally even if cloud fails
+        toast('⚠️ Could not sync photo to cloud. Try a smaller image.');
       }
     };
     reader.readAsDataURL(file);
