@@ -54,6 +54,26 @@ export const auth = {
     });
     if (error) throw error;
   },
+
+  async updateUserProfile({ display_name, avatar_url }) {
+    if (!supabase) throw new Error('Supabase not configured');
+    const updateData = {};
+    if (display_name !== undefined) updateData.display_name = display_name;
+    if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
+    const { data, error } = await supabase.auth.updateUser({ data: updateData });
+    if (error) throw error;
+    return data;
+  },
+
+  async getUserProfile() {
+    if (!supabase) return { display_name: '', avatar_url: null };
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) return { display_name: '', avatar_url: null };
+    return {
+      display_name: user.user_metadata?.display_name || '',
+      avatar_url: user.user_metadata?.avatar_url || null,
+    };
+  },
 };
 
 // ─── Get current user_id ───────────────────────────────────────────────────

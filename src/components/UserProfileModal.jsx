@@ -23,6 +23,7 @@ import {
 import { CURRENCIES } from '../utils/currency';
 import { scheduleNextReminder } from '../utils/reminder';
 import { useToast } from './Toast';
+import { auth } from '../supabase';
 
 export default function UserProfileModal({
   userEmail,
@@ -77,28 +78,46 @@ export default function UserProfileModal({
     }
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const base64 = event.target.result;
       setProfilePic(base64);
       localStorage.setItem('spendly_profile_pic', base64);
-      toast('Profile photo updated! 📸');
+      try {
+        await auth.updateUserProfile({ avatar_url: base64 });
+        toast('Profile photo saved to cloud! 📸☁️');
+      } catch (err) {
+        console.error('Failed to save photo to Supabase:', err);
+        toast('Photo saved locally (cloud sync failed)');
+      }
     };
     reader.readAsDataURL(file);
   };
 
-  const handleRemovePhoto = () => {
+  const handleRemovePhoto = async () => {
     setProfilePic(null);
     localStorage.removeItem('spendly_profile_pic');
-    toast('Profile photo removed');
+    try {
+      await auth.updateUserProfile({ avatar_url: null });
+      toast('Profile photo removed from cloud 🗑️');
+    } catch (err) {
+      console.error('Failed to remove photo from Supabase:', err);
+      toast('Profile photo removed locally');
+    }
   };
 
-  const handleSaveName = () => {
+  const handleSaveName = async () => {
     const trimmed = tempName.trim();
     if (!trimmed) return;
     setUserName(trimmed);
     localStorage.setItem('spendly_user_name', trimmed);
     setIsEditingName(false);
-    toast('Display name updated! 👤');
+    try {
+      await auth.updateUserProfile({ display_name: trimmed });
+      toast('Name saved to cloud! 👤☁️');
+    } catch (err) {
+      console.error('Failed to save name to Supabase:', err);
+      toast('Name saved locally (cloud sync failed)');
+    }
   };
 
   // Compute stats

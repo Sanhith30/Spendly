@@ -132,12 +132,40 @@ export default function App() {
 
     async function initAuth() {
       const session = await auth.getSession();
-      setUser(session?.user || null);
+      const sessionUser = session?.user || null;
+      setUser(sessionUser);
+
+      if (sessionUser) {
+        // Load profile from Supabase user_metadata (authoritative source)
+        const profile = await auth.getUserProfile();
+        if (profile.display_name) {
+          setUserName(profile.display_name);
+          localStorage.setItem('spendly_user_name', profile.display_name);
+        }
+        if (profile.avatar_url) {
+          setProfilePic(profile.avatar_url);
+          localStorage.setItem('spendly_profile_pic', profile.avatar_url);
+        }
+      }
     }
     initAuth();
 
-    const { data: { subscription } } = auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null);
+    const { data: { subscription } } = auth.onAuthStateChange(async (_event, session) => {
+      const sessionUser = session?.user || null;
+      setUser(sessionUser);
+
+      if (sessionUser) {
+        // Sync profile from user_metadata whenever auth state changes
+        const profile = await auth.getUserProfile();
+        if (profile.display_name) {
+          setUserName(profile.display_name);
+          localStorage.setItem('spendly_user_name', profile.display_name);
+        }
+        if (profile.avatar_url) {
+          setProfilePic(profile.avatar_url);
+          localStorage.setItem('spendly_profile_pic', profile.avatar_url);
+        }
+      }
     });
 
     return () => subscription.unsubscribe();
