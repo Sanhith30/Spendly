@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Settings, Sun, Moon, LogOut, Sparkles } from 'lucide-react';
+import { Sun, Moon, LogOut, Sparkles } from 'lucide-react';
 import { CURRENCIES } from '../utils/currency';
 
 function getGreeting() {
@@ -118,14 +118,6 @@ export default function Header({
             }
           </button>
 
-          {/* Settings */}
-          <button
-            onClick={onSettings}
-            aria-label="Settings"
-            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1.5 rounded-lg hover:bg-[var(--bg-secondary)] transition shrink-0"
-          >
-            <Settings size={17} />
-          </button>
 
           {/* Sign out */}
           {onSignOut && (

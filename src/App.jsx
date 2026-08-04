@@ -608,9 +608,7 @@ export default function App() {
           setProfilePic={setProfilePic}
           expenses={expenses}
           currency={currency}
-          onCurrencyChange={(c) => handleSaveSettings({ currency: c, income, budget: monthlyBudgets[currentMonthStr] || 0 })}
-          darkMode={darkMode}
-          setDarkMode={handleToggleDarkMode}
+          onOpenSettings={() => { setShowProfileModal(false); setShowSettings(true); }}
           onSignOut={async () => {
             await auth.signOut();
             setUser(null);
