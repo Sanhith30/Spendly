@@ -23,7 +23,7 @@ import {
 import { CURRENCIES } from '../utils/currency';
 import { scheduleNextReminder } from '../utils/reminder';
 import { useToast } from './Toast';
-import { auth } from '../supabase';
+import { auth, supabase } from '../supabase';
 
 export default function UserProfileModal({
   userEmail,
@@ -94,7 +94,7 @@ export default function UserProfileModal({
     });
   };
 
-  // Handle Profile Picture File Upload (compresses to ~15-30KB before cloud save)
+  // Handle Profile Picture File Upload — uploads to Supabase Storage, saves URL
   const handlePhotoUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -107,17 +107,26 @@ export default function UserProfileModal({
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        // Compress first — shrinks from MB to ~20KB
+        // Show compressed preview immediately (for instant feedback)
         const compressed = await compressImage(event.target.result);
         setProfilePic(compressed);
-        localStorage.setItem('spendly_profile_pic', compressed);
 
-        await auth.updateUserProfile({ avatar_url: compressed });
+        // Get the logged-in user's ID for Storage path
+        const { data: { user } } = await supabase.auth.getUser();
+        const userId = user?.id;
+        if (!userId) throw new Error('Not logged in');
+
+        // Upload compressed image to Supabase Storage → get public URL
+        const publicUrl = await auth.uploadAvatar(userId, compressed);
+
+        // Save the public URL (tiny string) to localStorage as cache
+        setProfilePic(publicUrl);
+        localStorage.setItem('spendly_profile_pic', publicUrl);
+
         toast('Profile photo saved to cloud! 📸☁️');
       } catch (err) {
-        console.error('Failed to save photo to Supabase:', err);
-        // Still show the photo locally even if cloud fails
-        toast('⚠️ Could not sync photo to cloud. Try a smaller image.');
+        console.error('Failed to upload avatar:', err);
+        toast('⚠️ Upload failed. Please try again.');
       }
     };
     reader.readAsDataURL(file);

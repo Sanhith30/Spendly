@@ -55,6 +55,34 @@ export const auth = {
     if (error) throw error;
   },
 
+  async uploadAvatar(userId, base64DataUrl) {
+    if (!supabase) throw new Error('Supabase not configured');
+
+    // Convert base64 data URL to a Blob for upload
+    const res = await fetch(base64DataUrl);
+    const blob = await res.blob();
+
+    const filePath = `${userId}/avatar.jpg`;
+
+    // Upload to Supabase Storage bucket 'avatars' (upsert = overwrite if exists)
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, blob, { contentType: 'image/jpeg', upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    // Get the public URL (just a small string, safe to store in user_metadata)
+    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+
+    // Save the public URL (not base64!) into user_metadata
+    const { data: userData, error: metaError } = await supabase.auth.updateUser({
+      data: { avatar_url: data.publicUrl },
+    });
+    if (metaError) throw metaError;
+
+    return data.publicUrl;
+  },
+
   async updateUserProfile({ display_name, avatar_url }) {
     if (!supabase) throw new Error('Supabase not configured');
     const updateData = {};
